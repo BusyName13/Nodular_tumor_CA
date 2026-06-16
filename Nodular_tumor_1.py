@@ -7,8 +7,8 @@ from colors import *
 FIELD_SIZE = (750, 750) # in cells
 CELL_SIZE = 1 # in px
 
-SIM_SPEED = 6000
-FPS = 6000
+SIM_SPEED = 600
+FPS = 600
 
 MAIN_COLOR = WHITE
 BACKGROUND_COLOR = BLACK
