@@ -3,8 +3,14 @@ from scipy.signal import convolve2d
 import pygame
 from graphic import *
 from colors import *
+import numba
+import time
+timer = 0
+tick_time = 0
+count = 0
 
-FIELD_SIZE = (750, 750) # in cells
+
+FIELD_SIZE = (1500, 750) # in cells
 CELL_SIZE = 1 # in px
 
 SIM_SPEED = 600
@@ -17,6 +23,101 @@ HEALTHY = BLACK
 CANCERED = (138, 74, 91)
 DEAD = GRAY
 STATES_COLOR = [HEALTHY, CANCERED, DEAD]
+# t = 144.640 ms
+# t = 126.232 ms
+# t = 106.217 ms
+# t = 112.610 ms
+# @numba.njit(parallel=True, fastmath=True)
+# def conv2d_calc(field, kernel, pad_field, res):
+#     k_h, k_w = kernel.shape
+#     f_h, f_w =  field.shape
+#     c_i, c_j = k_h//2, k_w//2
+    
+#     pad_field[ c_i:-c_i, c_j:-c_j] = field
+#     pad_field[    :c_i,  c_j:-c_j] = field[-c_i:,       :]
+#     pad_field[-c_i:,     c_j:-c_j] = field[    :c_i,    :]
+#     pad_field[    :,        :c_j]  = pad_field[:, -2*c_j:-c_j]
+#     pad_field[    :,    -c_j:]     = pad_field[:,    c_j:2*c_j]
+
+#     res[:] = 0.0
+#     for f_i in numba.prange(f_h):
+#         for k_i in range(k_h):
+#             for k_j in range(k_w):
+#                 k_val = kernel[k_i, k_j]
+#                 for f_j in range(f_w):
+#                     res[f_i, f_j] += pad_field[f_i+k_i, f_j+k_j] * k_val
+#     return res
+
+@numba.njit(parallel=True, fastmath=True)
+def conv2d_calc(field, kernel, pad_field): 
+    k_h, k_w = kernel.shape 
+    f_h, f_w = field.shape 
+    c_i, c_j = k_h//2, k_w//2 
+
+    pad_field[ c_i:-c_i, c_j:-c_j] = field 
+    pad_field[ :c_i, c_j:-c_j] = field[-c_i:, :] 
+    pad_field[-c_i:, c_j:-c_j] = field[ :c_i, :] 
+    pad_field[ :, :c_j] = pad_field[:, -2*c_j:-c_j] 
+    pad_field[ :, -c_j:] = pad_field[:, c_j:2*c_j] 
+
+    res = np.zeros_like(field) 
+    for f_i in numba.prange(f_h): 
+        for k_i in range(k_h): 
+            for k_j in range(k_w): 
+                for f_j in range(f_w): 
+                    res[f_i, f_j] += pad_field[f_i+k_i, f_j+k_j] * kernel[k_i, k_j] 
+    return res
+
+cache = {}
+def conv2d(field, kernel):
+    k_h, k_w = kernel.shape
+    f_h, f_w =  field.shape
+    c_i, c_j = k_h//2, k_w//2
+    if (f_h, f_w, k_h, k_w) in cache:
+        pad_field, res = cache[(f_h, f_w, k_h, k_w)]
+    else:
+        pad_field = np.empty((f_h+2*c_i, f_w+2*c_j), dtype=field.dtype)  
+        res = np.zeros_like(field)
+        cache[(f_h, f_w, k_h, k_w)] = (pad_field, res)
+    return conv2d_calc(field, kernel, pad_field)#, res)
+# _ = conv2d(np.ones((3, 3)), np.ones((3, 3)))
+    
+
+
+# @numba.njit(parallel=False, fastmath=False)
+def logic(field, kernel):
+    global tick_time
+    tick_time -= time.perf_counter()
+    conv_0 = conv2d((field==0).astype(np.int64), kernel)
+    conv_1 = conv2d((field==1).astype(np.int64), kernel)
+    conv_2 = conv2d((field==2).astype(np.int64), kernel)
+    tick_time += time.perf_counter()
+    
+    new_field = np.zeros_like(field)
+    rand = np.random.random_sample(field.shape)
+    to_cancer_healthy = (field == 0) & ((0.00_000_0 + 0.2*conv_1 - rand) > 0) | (field == 1)
+    new_field[to_cancer_healthy] = 1
+    # del to_cancer_healthy
+
+    to_kill_healthy = (field == 0) & ((0.01_5*conv_2*conv_2 - rand) > 0) | (field == 2)
+    new_field[to_kill_healthy] = 2
+    # del to_kill_healthy
+
+    to_cure_cancered = (field == 1) & ((0.05*conv_0 - rand) > 0)
+    new_field[to_cure_cancered] = 0
+    # del to_cure_cancered
+
+    to_kill_cancered = (field == 1) & ((0.00_0001*conv_1 + 0.05*conv_2 - rand) > 0)
+    new_field[to_kill_cancered] = 2
+    # del to_kill_cancered
+
+    to_cure_dead = ( (field == 2) & ((0.03*conv_0 - rand) > 0) )
+    new_field[to_cure_dead] = 0
+    # del to_cure_dead
+    # if field == new_field:
+    #     return "??"
+    return new_field
+# logic(np.zeros((3, 3), dtype=np.int16), np.zeros((3, 3), dtype=np.int8))
 
 
 class Game:
@@ -42,35 +143,7 @@ class Game:
 
     def make_tick(self):
         self.step += 1
-        bound = "wrap"
-        # conv_x: type = np.array,  conv_x.shape=self.field,    it is an array that for each cell counts number of near cells of type x (using a kernel)
-        conv_0 = convolve2d(self.field==0, self.kernel, mode="same", boundary=bound)
-        conv_1 = convolve2d(self.field==1, self.kernel, mode="same", boundary=bound)
-        conv_2 = convolve2d(self.field==2, self.kernel, mode="same", boundary=bound)
-        
-        new_field = np.zeros_like(self.field)
-
-        to_cancer_healthy = (self.field == 0) & ((0.00_000_0 + 0.2*conv_1 - np.random.random((self.height, self.width))) > 0) | (self.field == 1)
-        new_field[to_cancer_healthy] = 1
-        del to_cancer_healthy
-
-        to_kill_healthy = (self.field == 0) & ((0.01_5*conv_2*conv_2 - np.random.random((self.height, self.width))) > 0) | (self.field == 2)
-        new_field[to_kill_healthy] = 2
-        del to_kill_healthy
-
-        to_cure_cancered = (self.field == 1) & ((0.05*conv_0 - np.random.random((self.height, self.width))) > 0)
-        new_field[to_cure_cancered] = 0
-        del to_cure_cancered
-
-        to_kill_cancered = (self.field == 1) & ((0.00_0001*conv_1 + 0.05*conv_2 - np.random.random((self.height, self.width))) > 0)
-        new_field[to_kill_cancered] = 2
-        del to_kill_cancered
-
-        to_cure_dead = ( (self.field == 2) & ((0.03*conv_0 - np.random.random((self.height, self.width))) > 0) )
-        new_field[to_cure_dead] = 0
-        del to_cure_dead
-
-        self.field = new_field
+        self.field = logic(self.field, self.kernel)
         
         # print(np.count_nonzero(self.field == 0), np.count_nonzero(self.field == 1), np.count_nonzero(self.field == 2), sep='\t')
 
@@ -144,7 +217,7 @@ def make_agents(field, prev_feld, func):
 
 
 to_render = [Fill(scr, BACKGROUND_COLOR)]
-to_render = [Rectangle(scr, (0, 0), 300, 25, BACKGROUND_COLOR)]
+to_render = [Rectangle(scr, (0, 0), 700, 25, BACKGROUND_COLOR)]
 
 # # Lines
 # for i in range(CANVAS.game.height+1):
@@ -157,6 +230,7 @@ mouse_button_pressed = False
 def clear(CANVAS: Canvas):
     CANVAS.game.field = np.zeros((CANVAS.game.height, CANVAS.game.width), dtype=int)
     CANVAS.game.step = 0
+
 
 def start_simulation(CANVAS: Canvas, button: Button):
     if not CANVAS.game.start_simulation:
@@ -186,6 +260,8 @@ prev_field = -1*np.ones_like(CANVAS.get_field())
 
 running = True
 while running: 
+    flag = False
+    tick_time = 0
     this_tick = to_render.copy()
     for button in Buttons:
         button.state = 0
@@ -210,20 +286,31 @@ while running:
         
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
+                # tick_time -= time.perf_counter()
                 CANVAS.game.make_tick()
+                # tick_time += time.perf_counter()
+                flag = True
             if event.key == pygame.K_c:
                 clear(CANVAS)
+
         
     # Logic
     if CANVAS.game.start_simulation:
+        # tick_time -= time.perf_counter()
         CANVAS.game.make_tick()
+        # tick_time += time.perf_counter()
+        flag = True
     
+    if tick_time < 1 and flag:
+        timer += tick_time
+        count += 3
+
     this_tick += make_agents(CANVAS.game.field, prev_field, create_agent)
     # this_tick += list(map(lambda pos: Rectangle(scr, pos, CANVAS.game.cell_size, CANVAS.game.cell_size, STATES_COLOR[0]), np.flip(np.array(CANVAS.get_elems(0)).T, 1)*CANVAS.game.cell_size  + (CANVAS.left, CANVAS.top)))
     # this_tick += list(map(lambda pos: Rectangle(scr, pos, CANVAS.game.cell_size, CANVAS.game.cell_size, STATES_COLOR[1]), np.flip(np.array(CANVAS.get_elems(1)).T, 1)*CANVAS.game.cell_size  + (CANVAS.left, CANVAS.top)))
     # this_tick += list(map(lambda pos: Rectangle(scr, pos, CANVAS.game.cell_size, CANVAS.game.cell_size, STATES_COLOR[2]), np.flip(np.array(CANVAS.get_elems(2)).T, 1)*CANVAS.game.cell_size  + (CANVAS.left, CANVAS.top)))
 
-    this_tick.append(Text(scr, font, f"{clock.get_fps():.1f} {len(this_tick)} ({np.count_nonzero(CANVAS.get_field() == 0)}, {np.count_nonzero(CANVAS.get_field() == 1)}, {np.count_nonzero(CANVAS.get_field() == 2)}) {CANVAS.game.step}", (0, 0), RED))
+    this_tick.append(Text(scr, font, f"{clock.get_fps():.1f} {timer/max(count, 1)*1000:.2f} ({np.count_nonzero(CANVAS.get_field() == 0)}, {np.count_nonzero(CANVAS.get_field() == 1)}, {np.count_nonzero(CANVAS.get_field() == 2)}) {CANVAS.game.step}", (0, 0), RED))
     # this_tick.append(Text(scr, font, str(CANVAS.field), (CANVAS.left, CANVAS.top+CANVAS.height*CANVAS.game.cell_size), WHITE))
     for command in this_tick:
         command.evaluate()
@@ -231,4 +318,5 @@ while running:
 
     prev_field = CANVAS.game.field.copy()
 
+print(f"t = {timer/max(count, 1)*1000:.3f} ms")
 pygame.quit()

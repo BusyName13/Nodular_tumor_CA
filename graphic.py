@@ -26,7 +26,7 @@ class Circle:
         self.radius = radius
         self.color = color
     def evaluate(self):
-        pygame.draw.circle(self.surface, self.color, self.pos, self.radius)
+        return pygame.draw.circle(self.surface, self.color, self.pos, self.radius)
 
 class Rectangle:
     def __init__(self, surface, pos, width, height, color):
@@ -36,7 +36,7 @@ class Rectangle:
         self.height = height
         self.color = color
     def evaluate(self):
-        pygame.draw.rect(self.surface, self.color, (self.pos[0], self.pos[1], self.width, self.height))
+        return pygame.draw.rect(self.surface, self.color, (self.pos[0], self.pos[1], self.width, self.height))
 
 class Line:
     def __init__(self, surface, start_pos, end_pos, color):
@@ -45,7 +45,7 @@ class Line:
         self.end_pos = end_pos
         self.color = color
     def evaluate(self):
-        pygame.draw.line(self.surface, self.color, self.start_pos, self.end_pos)
+        return pygame.draw.line(self.surface, self.color, self.start_pos, self.end_pos)
 
 class Button:
     def __init__(self, surface, font, pos, width, height, text, event=None, color=colors.BLACK, text_color=colors.WHITE, hover_color=(150, 150, 150), click_color=(50, 50, 50)):
@@ -64,7 +64,6 @@ class Button:
         self.state = 0
 
     def hover(self, mouse_pos: tuple[int, int]):
-        self.text_render = self.font.render(self.text, True, self.text_color)
         if  (0 < mouse_pos[0] - self.pos[0] < self.width) and (0 < mouse_pos[1] - self.pos[1] < self.height):
             if self.hoverable and self.state != 2:
                 self.state = 1
@@ -79,6 +78,7 @@ class Button:
         return False
     
     def evaluate(self):
+        self.text_render = self.font.render(self.text, True, self.text_color)
         match self.state:
             case 0: color = self.color
             case 1: color = self.hover_color
