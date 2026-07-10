@@ -79,7 +79,7 @@ def conv2d(field, kernel):
         pad_field = np.empty((f_h+2*c_i, f_w+2*c_j), dtype=field.dtype)  
         res = np.zeros_like(field)
         cache[(f_h, f_w, k_h, k_w)] = (pad_field, res)
-    return conv2d_calc(field, kernel, pad_field)#, res)
+    return conv2d_calc(field, kernel, pad_field)
 # _ = conv2d(np.ones((3, 3)), np.ones((3, 3)))
     
 
