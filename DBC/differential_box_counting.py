@@ -68,7 +68,7 @@ def DBC(img_name):
     return FD
 
 
-dataset_path = r"C:\Users\Lenovo\Documents\INNO-dir\Tumors\Nodular_tumor_CA\FBM_png"
+dataset_path = r"C:\Users\Lenovo\Documents\INNO-dir\Tumors\Nodular_tumor_CA\test_imgs"
 
 image_files = sorted([f for f in os.listdir(dataset_path)])
 results = dict()
@@ -79,7 +79,7 @@ for file_name in image_files:
     fd = DBC(img_path)
     print(f"Файл: {file_name}")
     print("DBC =", fd)
-    results.setdefault(float(file_name[5:8]), []).append(float(f"{float(fd):.4f}"))
+    results.setdefault(file_name[5:8], []).append(float(f"{float(fd):.4f}"))
 
     #show_image(img_path) #вывод изображения
 
