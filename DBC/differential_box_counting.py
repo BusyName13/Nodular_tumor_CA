@@ -5,6 +5,15 @@ import math
 import matplotlib.pyplot as plt
 
 
+def show_image(img_path):
+    img = cv2.imread(img_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # для правильных цветов в matplotlib
+    plt.figure(figsize=(5, 5))
+    plt.imshow(img)
+    plt.title(file_name)
+    plt.axis("off")
+    plt.show()
+
 def show_MNK(dots, k, b):
     x = dots[:, 0]
     y = dots[:, 1]
@@ -55,24 +64,24 @@ def DBC(img_name):
     dots = np.array(dots)
 
     FD, b = np.polyfit(dots[:, 0], dots[:, 1],1) #МНК
-    #show_MNK(dots, FD, b)
+    #show_MNK(dots, FD, b) #вывод графика mnk для dbc
     return FD
 
 
 dataset_path = r"C:\Users\Lenovo\Documents\INNO-dir\Tumors\Nodular_tumor_CA\FBM_png"
 
 image_files = sorted([f for f in os.listdir(dataset_path)])
+results = dict()
 
 for file_name in image_files:
     img_path = os.path.join(dataset_path, file_name)
 
+    fd = DBC(img_path)
     print(f"Файл: {file_name}")
-    print("DBC =", DBC(img_path))
+    print("DBC =", fd)
+    results.setdefault(float(file_name[5:8]), []).append(float(f"{float(fd):.4f}"))
 
-    """img = cv2.imread(img_path)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # для правильных цветов в matplotlib
-    plt.figure(figsize=(5, 5))
-    plt.imshow(img)
-    plt.title(file_name)
-    plt.axis("off")
-    plt.show()"""
+    #show_image(img_path) #вывод изображения
+
+for c in results:
+    print(f"{c}:", *results.get(c))
