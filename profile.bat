@@ -1,0 +1,1 @@
+python.exe -m cProfile -s tottime Nodular_tumour_2.py > profile_result.txt
