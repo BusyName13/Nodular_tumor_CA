@@ -94,8 +94,8 @@ buffer_float = np.empty(parameters['FIELD_SIZE'], dtype=np.float64)
 buffer_float2 = np.empty(parameters['FIELD_SIZE'], dtype=np.float64)
 buffer_int_1 = np.empty(parameters['FIELD_SIZE'], dtype=int)
 buffer_int_2 = np.empty(parameters['FIELD_SIZE'], dtype=int)
-buffer_int_3 = np.empty(parameters['FIELD_SIZE'], dtype=int)
-buffer_int_4 = np.empty(parameters['FIELD_SIZE'], dtype=int)
+buffer_int16_1 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
+buffer_int16_2 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
 buffer_int8 = np.empty(parameters['FIELD_SIZE'], dtype=np.int8)
 # buffer_shift_fields = np.empty()
 rand_generator = np.random.default_rng()
@@ -105,8 +105,8 @@ rand_generator = np.random.default_rng()
 ### Functions
 
 # Math
-@numba.njit(parallel=True, fastmath=True)
-def conv2d_calc(field, kernel, pad_field): 
+@numba.njit(parallel=True, fastmath=True, cache=True)
+def conv2d_calc(field, kernel, pad_field, out): 
     k_h, k_w = kernel.shape 
     f_h, f_w = field.shape 
     c_i, c_j = k_h//2, k_w//2 
@@ -117,28 +117,76 @@ def conv2d_calc(field, kernel, pad_field):
     pad_field[ :, :c_j] = pad_field[:, -2*c_j:-c_j] 
     pad_field[ :, -c_j:] = pad_field[:, c_j:2*c_j] 
 
-    res = np.zeros_like(field) 
+    out[:] = 0
     for f_i in numba.prange(f_h): 
         for k_i in range(k_h): 
             for k_j in range(k_w): 
                 for f_j in range(f_w): 
-                    res[f_i, f_j] += pad_field[f_i+k_i, f_j+k_j] * kernel[k_i, k_j] 
-    return res
+                    out[f_i, f_j] += pad_field[f_i+k_i, f_j+k_j] * kernel[k_i, k_j] 
+    return out
 
 cache = {}
-def conv2d(field, kernel):
+def conv2d(field, kernel, out=None):
     k_h, k_w = kernel.shape
     f_h, f_w =  field.shape
     c_i, c_j = k_h//2, k_w//2
+    if out == None:
+        out = np.empty_like(field)
     if (f_h, f_w, k_h, k_w) in cache:
         pad_field, res = cache[(f_h, f_w, k_h, k_w)]
     else:
         pad_field = np.empty((f_h+2*c_i, f_w+2*c_j), dtype=field.dtype)  
         res = np.zeros_like(field)
         cache[(f_h, f_w, k_h, k_w)] = (pad_field, res)
-    return conv2d_calc(field, kernel, pad_field)
-# _ = conv2d(np.ones((3, 3), dtype=np.float64), np.ones((3, 3), dtype=np.float64))
-# _ = conv2d(np.ones((3, 3), dtype=np.int64), np.ones((3, 3), dtype=np.uint8))
+    return conv2d_calc(field, kernel, pad_field, out)
+_ = conv2d(np.ones((3, 3), dtype=np.float64), np.ones((3, 3), dtype=np.float64))
+_ = conv2d(np.ones((3, 3), dtype=np.int64), np.ones((3, 3), dtype=np.uint8))
+
+@numba.njit(fastmath=True, cache=True)
+def run_mitosis_loop_numba(
+    cells, age, g2, ready_parents_mask, 
+    buffer_y, buffer_x, buffer_dir,
+    num_empty, field_h, field_w, mode
+    ):
+
+    if num_empty == 0:
+        return
+
+    dy_arr = (0, -1,  0,  1)
+    dx_arr = (1,  0, -1,  0)
+    for step in range(4):
+        write_idx = 0
+        any_success = False
+
+        for i in range(num_empty):
+            curr_y = buffer_y[i]
+            curr_x = buffer_x[i]
+            
+            direction = (buffer_dir[i] + step) & 3
+            
+            parent_y = (curr_y + dy_arr[direction]) % field_h
+            parent_x = (curr_x + dx_arr[direction]) % field_w
+            
+            if ready_parents_mask[parent_y, parent_x]:
+                cells[curr_y, curr_x] = mode
+                age[curr_y, curr_x] = 0.0
+                g2[curr_y, curr_x] = 0.0
+                
+                age[parent_y, parent_x] = 0.0
+                g2[parent_y, parent_x] = 0.0
+                
+                ready_parents_mask[parent_y, parent_x] = False
+                
+                any_success = True
+            else:
+                buffer_y[write_idx] = curr_y
+                buffer_x[write_idx] = curr_x
+                buffer_dir[write_idx] = buffer_dir[i]
+                write_idx += 1
+                
+        num_empty = write_idx
+        if num_empty == 0:
+            break
 
 # Graphic
 render_arr = np.zeros((parameters['FIELD_HEIGHT'], parameters['FIELD_WIDTH'], 4), dtype=np.uint8) # BGRA
@@ -213,153 +261,48 @@ def H_cells_lim(fields, params=parameters):
     np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask2)
     fields['cells'][buffer_mask2] = 3
 
-        # np.equal(fields['cells'], 0, out=buffer_mask2)
-        
-        # # shift direction: 0-right, 1-up, 2-left, 3-down
-        # buffer_mask_4d[0][ :,  1:  ] = buffer_mask2[ :,   :-1]
-        # buffer_mask_4d[1][ :-1, :  ] = buffer_mask2[1:,   :  ]
-        # buffer_mask_4d[2][ :,   :-1] = buffer_mask2[ :,  1:  ]
-        # buffer_mask_4d[3][1:,   :  ] = buffer_mask2[ :-1, :  ]
-        
-        # buffer_mask_4d[0][ :,  0] = buffer_mask2[ :, -1]
-        # buffer_mask_4d[1][-1,  :] = buffer_mask2[ 0,  :]
-        # buffer_mask_4d[2][ :, -1] = buffer_mask2[ :,  0]
-        # buffer_mask_4d[3][ 0,  :] = buffer_mask2[-1,  :]
-
-        # np.choose(buffer_int8, buffer_mask_4d, out=buffer_mask2) 
-        # np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask2) # buffer_mask2 - mask of cells that mitosis
-
-        # # Cells that did mitosis
-        # fields['age'][buffer_mask2] = 0.0
-        # fields['G2'][buffer_mask2] = 0.0
-        # buffer_mask[buffer_mask2] = False
-        
-        # buffer_int8 += 2
-        # buffer_int8 %= 4
-        
-        # New method with allocating memory (mb a lot of memory)
 def healthy_mitosis(fields, params=parameters):
-    global buffer_mask, buffer_mask2, buffer_mask3
-    global buffer_float, buffer_int_1, buffer_int_2, buffer_int_3, buffer_int_4, buffer_int8
-    global rand_generator
+    global buffer_mask, buffer_mask2
+    global buffer_int16_1, buffer_int16_2, buffer_int8
     #, buffer_mask_4d, i_indices, j_indices
     np.equal(fields['cells'], 1, out=buffer_mask)
     np.greater_equal(fields['G2'], params['AGE_HEALTHY_G2'], out=buffer_mask2)
     np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask)
     # buffer_mask - healthy cells that ready to mitosis
 
-    y, x = np.where(fields['cells'] == 0)
+    np.equal(fields['cells'], 0, out=buffer_mask2)
+    y, x = np.nonzero(buffer_mask2)
+
     num_empty = len(y)
     if num_empty == 0:
         return
-    
-    rand_slice = buffer_float.ravel()[:num_empty]
-    rand_generator.random(out=rand_slice)
-    dirs = buffer_int8.ravel()[:num_empty]
-    np.multiply(rand_slice, 3.9999, out=dirs, casting='unsafe')
-    
-    for _ in range(4):
-        num_empty = len(y)
-        dx = buffer_int_3.ravel()[:num_empty]
-        dy = buffer_int_4.ravel()[:num_empty]
-        np.choose(dirs, [1, 0, -1, 0], out=dx)
-        np.choose(dirs, [0, -1, 0, 1], out=dy)
-        
-        parent_y = buffer_int_1.ravel()[:num_empty]
-        np.add(y, dy, out=parent_y)
-        parent_y %= params['FIELD_HEIGHT']
 
-        parent_x = buffer_int_2.ravel()[:num_empty]
-        np.add(x, dx, out=parent_x)
-        parent_x %= params['FIELD_WIDTH']
-
-        success_mask = buffer_mask[parent_y, parent_x]
-
-        if np.any(success_mask):
-            child_y, child_x = y[success_mask], x[success_mask]
-            succ_parent_y, succ_parent_x = parent_y[success_mask], parent_x[success_mask]
-
-            fields['cells'][child_y, child_x] = 1
-            fields['age'][child_y, child_x] = 0.0
-            fields['G2'][child_y, child_x] = 0.0
-            
-            fields['age'][succ_parent_y, succ_parent_x] = 0.0
-            fields['G2'][succ_parent_y, succ_parent_x] = 0.0
-
-            buffer_mask[succ_parent_y, succ_parent_x] = False
-
-            np.logical_not(success_mask, out=success_mask)
-            y = y[success_mask]
-            x = x[success_mask]
-            dirs = dirs[success_mask]
-
-            if len(y) == 0:
-                break
-        # Change direction
-        dirs += 1
-        dirs %= 4
+    buffer_int8.ravel()[:num_empty] = np.random.randint(0, 4, size=num_empty)
+    run_mitosis_loop_numba(fields['cells'], fields['age'], fields['G2'], 
+                           buffer_mask, y, x, buffer_int8.ravel(), 
+                           num_empty, params['FIELD_HEIGHT'], params['FIELD_WIDTH'], 1)
 
 
 def prolif_mitosis(fields, params=parameters):
-    global buffer_mask, buffer_mask2, buffer_mask3
-    global buffer_float, buffer_int_1, buffer_int_2, buffer_int_3, buffer_int_4, buffer_int8
-    global rand_generator
+    global buffer_mask, buffer_mask2
+    global buffer_int16_1, buffer_int16_2, buffer_int8
     #, buffer_mask_4d, i_indices, j_indices
     np.equal(fields['cells'], 2, out=buffer_mask)
     np.greater_equal(fields['G2'], parameters['AGE_PROLIF_TUMOUR_G2'], out=buffer_mask2)
     np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask)
     # buffer_mask - healthy cells that ready to mitosis
 
-    y, x = np.where(fields['cells'] <= 1)
+    np.less(fields['cells'], 2, out=buffer_mask2)
+    y, x = np.nonzero(buffer_mask2)
+    
     num_empty = len(y)
     if num_empty == 0:
         return
     
-    rand_slice = buffer_float.ravel()[:num_empty]
-    rand_generator.random(out=rand_slice)
-    dirs = buffer_int8.ravel()[:num_empty]
-    np.multiply(rand_slice, 3.9999, out=dirs, casting='unsafe')
-    
-    for _ in range(4):
-        num_empty = len(y)
-        dx = buffer_int_3.ravel()[:num_empty]
-        dy = buffer_int_4.ravel()[:num_empty]
-        np.choose(dirs, [1, 0, -1, 0], out=dx)
-        np.choose(dirs, [0, -1, 0, 1], out=dy)
-        
-        parent_y = buffer_int_1.ravel()[:num_empty]
-        np.add(y, dy, out=parent_y)
-        parent_y %= params['FIELD_HEIGHT']
-
-        parent_x = buffer_int_2.ravel()[:num_empty]
-        np.add(x, dx, out=parent_x)
-        parent_x %= params['FIELD_WIDTH']
-
-        success_mask = buffer_mask[parent_y, parent_x]
-
-        if np.any(success_mask):
-            child_y, child_x = y[success_mask], x[success_mask]
-            succ_parent_y, succ_parent_x = parent_y[success_mask], parent_x[success_mask]
-
-            fields['cells'][child_y, child_x] = 2
-            fields['age'][child_y, child_x] = 0.0
-            fields['G2'][child_y, child_x] = 0.0
-            
-            fields['age'][succ_parent_y, succ_parent_x] = 0.0
-            fields['G2'][succ_parent_y, succ_parent_x] = 0.0
-
-            buffer_mask[succ_parent_y, succ_parent_x] = False
-
-            np.logical_not(success_mask, out=success_mask)
-            y = y[success_mask]
-            x = x[success_mask]
-            dirs = dirs[success_mask]
-
-            if len(y) == 0:
-                break
-        # Change direction
-        dirs += 1
-        dirs %= 4
+    buffer_int8.ravel()[:num_empty] = np.random.randint(0, 4, size=num_empty)
+    run_mitosis_loop_numba(fields['cells'], fields['age'], fields['G2'], 
+                           buffer_mask, y, x, buffer_int8.ravel(), 
+                           num_empty, params['FIELD_HEIGHT'], params['FIELD_WIDTH'], 2)
 
 def H_O2_quiscent_to_prolif(fields, params=parameters):
     global buffer_mask, buffer_mask2, buffer_float
@@ -408,9 +351,9 @@ font = pygame.font.Font(None, 24)
 clock = pygame.time.Clock()
 
 field_pixels = pygame.Surface((parameters['FIELD_WIDTH'], parameters['FIELD_HEIGHT']))
-point_state = {'state': None, 'O2': None, 'H': None, 'age': None, 'G2': None}
+point_state = {'state': -1, 'O2': -1, 'H': -1, 'age': -1, 'G2': -1}
 step = 0
-max_step = int(200/parameters['DT'])
+max_step = int(20/parameters['DT'])
 print(f"max_step = {max_step}")
 timer = 0.0
 
@@ -452,14 +395,13 @@ while running:
 
     ### Make_step
     if is_simulating: 
+        start_time = time.perf_counter_ns()
         
         O2_live_consumption(fields, parameters)
         H_healthy_consumption(fields, parameters)
         H_cells_lim(fields, parameters)
-        start_time = time.perf_counter_ns()
         healthy_mitosis(fields, parameters)
         prolif_mitosis(fields, parameters)
-        end_time = time.perf_counter_ns()
         H_O2_quiscent_to_prolif(fields, parameters)
         O2_G2_cells_consumption(fields, parameters)
         age_cells_inc(fields, parameters)
@@ -468,6 +410,7 @@ while running:
         O2_diffusion(fields)
         H_diffusion(fields)
 
+        end_time = time.perf_counter_ns()
 
         # start_time = time.perf_counter_ns()
         timer += end_time - start_time
