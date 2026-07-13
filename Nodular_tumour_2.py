@@ -36,7 +36,7 @@ cell_cols = np.array([
 ])
 
 parameters = {'FIELD_WIDTH': 1000, 'FIELD_HEIGHT': 750, 'FIELD_SIZE': (-1, -1),
-              'DT': 1.0, 'DT_S': 3600.0, 'DX': 3e-05,
+              'MAX_TIME': -1.0, 'DT': 1.0, 'DT_S': 3600.0, 'DX': 3e-05,
               'O2_DIFFUSION_K': 2.41e-9, 'H_DIFFUSION_K': 1.1e-9, 
               'O2_HEALTHY_LIVE_CONSUMPTION': -1.0, 'O2_HEALTHY_MITOSIS_CONSUMPTION': -1.0, 'O2_HEALTHY_HYPOXIA_LIMIT': -1.0, 'H_HEALTHY_NECR_COUNT': -1.0, 'H_HEALTHY_LIVE_CONSUMPTION': -1.0, 'H_HEALTHY_DEATH_LIMIT': -1.0, 'H_HEALTHY_APOPTOSIS_CONSUMPTION': -1.0, 'AGE_HEALTHY_ADULT': -1.0, 'AGE_HEALTHY_G2': -1.0,
               'O2_PROLIF_TUMOUR_LIVE_CONSUMPTION': -1.0, 'O2_PROLIF_TUMOUR_MITOSIS_CONSUMPTION': -1.0, 'O2_PROLIF_TUMOUR_QUISC_LIMIT': -1.0, 'H_PROLIF_TUMOUR_RELEASE_COUNT': -1.0, 'AGE_PROLIF_TUMOUR_ADULT': -1.0, 'AGE_PROLIF_TUMOUR_G2': -1.0, 
@@ -277,7 +277,7 @@ def healthy_mitosis(fields, params=parameters):
     if num_empty == 0:
         return
 
-    buffer_int8.ravel()[:num_empty] = np.random.randint(0, 4, size=num_empty)
+    buffer_int8.ravel()[:num_empty] = np.random.randint(0, 4, size=num_empty, dtype=np.int8)
     run_mitosis_loop_numba(fields['cells'], fields['age'], fields['G2'], 
                            buffer_mask, y, x, buffer_int8.ravel(), 
                            num_empty, params['FIELD_HEIGHT'], params['FIELD_WIDTH'], 1)
@@ -299,7 +299,7 @@ def prolif_mitosis(fields, params=parameters):
     if num_empty == 0:
         return
     
-    buffer_int8.ravel()[:num_empty] = np.random.randint(0, 4, size=num_empty)
+    buffer_int8.ravel()[:num_empty] = np.random.randint(0, 4, size=num_empty, dtype=np.int8)
     run_mitosis_loop_numba(fields['cells'], fields['age'], fields['G2'], 
                            buffer_mask, y, x, buffer_int8.ravel(), 
                            num_empty, params['FIELD_HEIGHT'], params['FIELD_WIDTH'], 2)
@@ -353,7 +353,7 @@ clock = pygame.time.Clock()
 field_pixels = pygame.Surface((parameters['FIELD_WIDTH'], parameters['FIELD_HEIGHT']))
 point_state = {'state': -1, 'O2': -1, 'H': -1, 'age': -1, 'G2': -1}
 step = 0
-max_step = int(20/parameters['DT'])
+max_step = int(parameters['MAX_TIME']/parameters['DT'])
 print(f"max_step = {max_step}")
 timer = 0.0
 
