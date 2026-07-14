@@ -35,14 +35,14 @@ def show_MNK(dots, k, b):
 
     plt.show()
 
-def DBC(img_name):
-    img = cv2.imread(img_name, cv2.IMREAD_GRAYSCALE)
+def DBC(img):
+    #img = cv2.imread(img_name, cv2.IMREAD_GRAYSCALE)
     img_size = min(img.shape)
     img = img[0:img_size, 0:img_size] #обрезали до квадрата
     if min(img.shape) != max(img.shape): print("!!! Изображение было обрезано до квадратного.")
     s = 2
     s_max = img_size // 2 + (img_size % 2)
-    G = 256 #количество оттенков
+    G = 4 #количество оттенков
 
     dots = []
     while s <= s_max: #для каждого размера s ячейки
@@ -67,8 +67,8 @@ def DBC(img_name):
     #show_MNK(dots, FD, b) #вывод графика mnk для dbc
     return FD
 
-
-dataset_path = r"C:\Users\Lenovo\Documents\INNO-dir\Tumors\Nodular_tumor_CA\test_imgs"
+"""
+dataset_path = r""
 
 image_files = sorted([f for f in os.listdir(dataset_path)])
 results = dict()
@@ -84,4 +84,4 @@ for file_name in image_files:
     #show_image(img_path) #вывод изображения
 
 for c in results:
-    print(f"{c}:", *results.get(c))
+    print(f"{c}:", *results.get(c))"""

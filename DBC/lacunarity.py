@@ -1,9 +1,13 @@
+# Lacunarity calculation is implemented based on the methodology and reference
+# code provided by PiresMA:
+# https://github.com/PiresMA/lacunarity_python_and_R
+
 import numpy as np
 import os
 import cv2
 
 
-def calculate_lacunarity(matrix, box_size):
+def calculate_lacunarity(matrix, box_size=10):
     """Calculate lacunarity for a given box size"""
     masses = []
     for i in range(matrix.shape[0] - box_size + 1):
@@ -24,8 +28,8 @@ def calculate_lacunarity(matrix, box_size):
 
     return M2 / (M1**2)
 
-
-dataset_path = r"C:\Users\Lenovo\Documents\INNO-dir\Tumors\Nodular_tumor_CA\FBM_png"
+"""
+dataset_path = r""
 
 image_files = sorted([f for f in os.listdir(dataset_path)])
 box_size = 10
@@ -35,7 +39,7 @@ for file_name in image_files:
     img_path = os.path.join(dataset_path, file_name)
     img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     img = img.astype(np.float64)
-    lacunarity = calculate_lacunarity(img, box_size)
+    lacunarity = calculate_lacunarity(img)
 
     print(f"Файл: {file_name}")
     print("Lacunarity =", lacunarity)
@@ -44,4 +48,4 @@ for file_name in image_files:
 
 for c in results:
     print(f"{c}:", *results.get(c))
-
+"""
