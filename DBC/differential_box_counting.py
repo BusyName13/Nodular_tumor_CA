@@ -10,7 +10,6 @@ def show_image(img_path):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # для правильных цветов в matplotlib
     plt.figure(figsize=(5, 5))
     plt.imshow(img)
-    plt.title(file_name)
     plt.axis("off")
     plt.show()
 
