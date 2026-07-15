@@ -1,3 +1,5 @@
+# Morris method realisation is implemented by library provided by Iwanga at.el.:
+
 #Iwanaga, T., Usher, W., & Herman, J. (2022). Toward SALib 2.0:
 #Advancing the accessibility and interpretability of global sensitivity analyses.
 # Socio-Environmental Systems Modelling, 4, 18155. doi:10.18174/sesmo.18155
@@ -5,6 +7,7 @@
 #Herman, J. and Usher, W. (2017) SALib:
 # An open-source Python library for sensitivity analysis. Journal of Open Source Software,2(9).
 # doi:10.21105/joss.00097
+
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -28,7 +31,7 @@ problem = {
         "O2_DIFFUSION_K",
         "AGE_HEALTHY_ADULT",
         "AGE_HEALTHY_G2",
-        "H_TUMOUR_TO_QUISC_LIMIT",
+        "H_PROLIF_TO_QUISC_LIMIT",
         "AGE_PROLIF_TUMOUR_G2",
         "VOLUME_MCF10A",
         "VOLUME_MCF7"
