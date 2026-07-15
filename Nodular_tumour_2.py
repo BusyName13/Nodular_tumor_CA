@@ -1,9 +1,6 @@
 import numpy as np
 import scipy.fft as sfft
 import numba # taichi
-import pygame
-import graphic as g
-import colors as col
 import time
 
 ### Classes
@@ -44,7 +41,31 @@ parameters["H_RELEASE_COUNT"] = parameters['DT'] * np.array([0.0, 0.0, parameter
 parameters["AGE_ADULT"] = np.array([0.0, parameters['AGE_HEALTHY_ADULT'], parameters['AGE_PROLIF_TUMOUR_ADULT'], 0.0])
 parameters["AGE_G2"] = np.array([0.0, parameters['AGE_HEALTHY_G2'], parameters['AGE_PROLIF_TUMOUR_G2'], 0.0])
 
+fields =  {"cells":  np.ones(parameters['FIELD_SIZE'], dtype=np.uint8),
+        "O2":     np.zeros(parameters['FIELD_SIZE'], dtype=np.float64), 
+        "O2_dif": FFT_Diffusion(parameters['FIELD_SIZE'], parameters['DX'], parameters['DT_S'], parameters['O2_DIFFUSION_K']),
+        "H":      np.zeros(parameters['FIELD_SIZE'], dtype=np.float64),
+        "H_dif":  FFT_Diffusion(parameters['FIELD_SIZE'], parameters['DX'], parameters['DT_S'], parameters['H_DIFFUSION_K']),
+        "age":    (100 * np.random.random(parameters['FIELD_SIZE'])) % 4,
+        "G2":     np.zeros(parameters['FIELD_SIZE'], dtype=np.float64)
+        }
+
+### Buffers
+buffer_mask = np.empty(parameters['FIELD_SIZE'], dtype=bool)
+buffer_mask2 = np.empty(parameters['FIELD_SIZE'], dtype=bool)
+buffer_mask3 = np.empty(parameters['FIELD_SIZE'], dtype=bool)
+buffer_float = np.empty(parameters['FIELD_SIZE'], dtype=np.float64)
+buffer_float2 = np.empty(parameters['FIELD_SIZE'], dtype=np.float64)
+buffer_int_1 = np.empty(parameters['FIELD_SIZE'], dtype=int)
+buffer_int_2 = np.empty(parameters['FIELD_SIZE'], dtype=int)
+buffer_int16_1 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
+buffer_int16_2 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
+buffer_int8 = np.empty(parameters['FIELD_SIZE'], dtype=np.int8)
+# rand_generator = np.random.default_rng()
+
 def import_parameters(file_name: str, params=parameters):
+    global fields, buffer_mask, buffer_mask2, buffer_mask3, buffer_float, buffer_float2, buffer_int_1, buffer_int_2
+    global buffer_int16_1, buffer_int16_2, buffer_int8
     dict = {}
     with open(file_name, 'r', encoding='utf-8') as f:
         dict.update({key: float(val) if (('.' in val) or ('e' in val)) else int(val) for line in f for key, val in [line.split()]})
@@ -56,77 +77,75 @@ def import_parameters(file_name: str, params=parameters):
         params["H_RELEASE_COUNT"] = parameters['DT'] * np.array([0.0, 0.0, params['H_PROLIF_TUMOUR_RELEASE_COUNT'], params['H_QUISC_TUMOUR_RELEASE_COUNT']])
         params["AGE_ADULT"] = np.array([0.0, params['AGE_HEALTHY_ADULT'], params['AGE_PROLIF_TUMOUR_ADULT'], 0.0])
         params["AGE_G2"] = np.array([0.0, params['AGE_HEALTHY_G2'], params['AGE_PROLIF_TUMOUR_G2'], 0.0])
+
+        fields =  {"cells":  np.ones(parameters['FIELD_SIZE'], dtype=np.uint8),
+                "O2":     np.zeros(parameters['FIELD_SIZE'], dtype=np.float64), 
+                "O2_dif": FFT_Diffusion(parameters['FIELD_SIZE'], parameters['DX'], parameters['DT_S'], parameters['O2_DIFFUSION_K']),
+                "H":      np.zeros(parameters['FIELD_SIZE'], dtype=np.float64),
+                "H_dif":  FFT_Diffusion(parameters['FIELD_SIZE'], parameters['DX'], parameters['DT_S'], parameters['H_DIFFUSION_K']),
+                "age":    (100 * np.random.random(parameters['FIELD_SIZE'])) % 4,
+                "G2":     np.zeros(parameters['FIELD_SIZE'], dtype=np.float64)
+                }
+
+        ### Buffers
+        buffer_mask = np.empty(parameters['FIELD_SIZE'], dtype=bool)
+        buffer_mask2 = np.empty(parameters['FIELD_SIZE'], dtype=bool)
+        buffer_mask3 = np.empty(parameters['FIELD_SIZE'], dtype=bool)
+        buffer_float = np.empty(parameters['FIELD_SIZE'], dtype=np.float64)
+        buffer_float2 = np.empty(parameters['FIELD_SIZE'], dtype=np.float64)
+        buffer_int_1 = np.empty(parameters['FIELD_SIZE'], dtype=int)
+        buffer_int_2 = np.empty(parameters['FIELD_SIZE'], dtype=int)
+        buffer_int16_1 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
+        buffer_int16_2 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
+        buffer_int8 = np.empty(parameters['FIELD_SIZE'], dtype=np.int8)
+        # rand_generator = np.random.default_rng()
     return dict
+
+
 import_parameters("parameters.txt", parameters)
 
 def save_data(file_name, fields, format="%d", filter=None):
     np.savetxt(file_name, fields['cells'], fmt=format)
-
-fields =  {"cells":  np.ones(parameters['FIELD_SIZE'], dtype=np.uint8),
-           "O2":     np.zeros(parameters['FIELD_SIZE'], dtype=np.float64), 
-           "O2_dif": FFT_Diffusion(parameters['FIELD_SIZE'], parameters['DX'], parameters['DT_S'], parameters['O2_DIFFUSION_K']),
-           "H":      np.zeros(parameters['FIELD_SIZE'], dtype=np.float64),
-           "H_dif":  FFT_Diffusion(parameters['FIELD_SIZE'], parameters['DX'], parameters['DT_S'], parameters['H_DIFFUSION_K']),
-           "age":    (100 * np.random.random(parameters['FIELD_SIZE'])) % 4,
-           "G2":     np.zeros(parameters['FIELD_SIZE'], dtype=np.float64)
-           }
-
-
-### Buffers
-buffer_mask = np.empty(parameters['FIELD_SIZE'], dtype=bool)
-buffer_mask2 = np.empty(parameters['FIELD_SIZE'], dtype=bool)
-buffer_mask3 = np.empty(parameters['FIELD_SIZE'], dtype=bool)
-buffer_mask_4d = [np.empty(parameters['FIELD_SIZE'], dtype=bool) for _ in range(4)]
-# i_indices, j_indices = np.ogrid[:parameters['FIELD_HEIGHT'], :parameters['FIELD_WIDTH']]
-buffer_float = np.empty(parameters['FIELD_SIZE'], dtype=np.float64)
-buffer_float2 = np.empty(parameters['FIELD_SIZE'], dtype=np.float64)
-buffer_int_1 = np.empty(parameters['FIELD_SIZE'], dtype=int)
-buffer_int_2 = np.empty(parameters['FIELD_SIZE'], dtype=int)
-buffer_int16_1 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
-buffer_int16_2 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
-buffer_int8 = np.empty(parameters['FIELD_SIZE'], dtype=np.int8)
-# buffer_shift_fields = np.empty()
-rand_generator = np.random.default_rng()
-
 ### Functions
 
 # Math
-@numba.njit(parallel=True, fastmath=True, cache=True)
-def conv2d_calc(field, kernel, pad_field, out): 
-    k_h, k_w = kernel.shape 
-    f_h, f_w = field.shape 
-    c_i, c_j = k_h//2, k_w//2 
 
-    pad_field[ c_i:-c_i, c_j:-c_j] = field 
-    pad_field[ :c_i, c_j:-c_j] = field[-c_i:, :] 
-    pad_field[-c_i:, c_j:-c_j] = field[ :c_i, :] 
-    pad_field[ :, :c_j] = pad_field[:, -2*c_j:-c_j] 
-    pad_field[ :, -c_j:] = pad_field[:, c_j:2*c_j] 
+# @numba.njit(parallel=True, fastmath=True, cache=True)
+# def conv2d_calc(field, kernel, pad_field, out): 
+#     k_h, k_w = kernel.shape 
+#     f_h, f_w = field.shape 
+#     c_i, c_j = k_h//2, k_w//2 
 
-    out[:] = 0
-    for f_i in numba.prange(f_h): 
-        for k_i in range(k_h): 
-            for k_j in range(k_w): 
-                for f_j in range(f_w): 
-                    out[f_i, f_j] += pad_field[f_i+k_i, f_j+k_j] * kernel[k_i, k_j] 
-    return out
+#     pad_field[ c_i:-c_i, c_j:-c_j] = field 
+#     pad_field[ :c_i, c_j:-c_j] = field[-c_i:, :] 
+#     pad_field[-c_i:, c_j:-c_j] = field[ :c_i, :] 
+#     pad_field[ :, :c_j] = pad_field[:, -2*c_j:-c_j] 
+#     pad_field[ :, -c_j:] = pad_field[:, c_j:2*c_j] 
 
-cache = {}
-def conv2d(field, kernel, out=None):
-    k_h, k_w = kernel.shape
-    f_h, f_w =  field.shape
-    c_i, c_j = k_h//2, k_w//2
-    if out == None:
-        out = np.empty_like(field)
-    if (f_h, f_w, k_h, k_w) in cache:
-        pad_field, res = cache[(f_h, f_w, k_h, k_w)]
-    else:
-        pad_field = np.empty((f_h+2*c_i, f_w+2*c_j), dtype=field.dtype)  
-        res = np.zeros_like(field)
-        cache[(f_h, f_w, k_h, k_w)] = (pad_field, res)
-    return conv2d_calc(field, kernel, pad_field, out)
-_ = conv2d(np.ones((3, 3), dtype=np.float64), np.ones((3, 3), dtype=np.float64))
-_ = conv2d(np.ones((3, 3), dtype=np.int64), np.ones((3, 3), dtype=np.uint8))
+#     out[:] = 0
+#     for f_i in numba.prange(f_h): 
+#         for k_i in range(k_h): 
+#             for k_j in range(k_w): 
+#                 for f_j in range(f_w): 
+#                     out[f_i, f_j] += pad_field[f_i+k_i, f_j+k_j] * kernel[k_i, k_j] 
+#     return out
+
+# cache = {}
+# def conv2d(field, kernel, out=None):
+#     k_h, k_w = kernel.shape
+#     f_h, f_w =  field.shape
+#     c_i, c_j = k_h//2, k_w//2
+#     if out == None:
+#         out = np.empty_like(field)
+#     if (f_h, f_w, k_h, k_w) in cache:
+#         pad_field, res = cache[(f_h, f_w, k_h, k_w)]
+#     else:
+#         pad_field = np.empty((f_h+2*c_i, f_w+2*c_j), dtype=field.dtype)  
+#         res = np.zeros_like(field)
+#         cache[(f_h, f_w, k_h, k_w)] = (pad_field, res)
+#     return conv2d_calc(field, kernel, pad_field, out)
+# _ = conv2d(np.ones((3, 3), dtype=np.float64), np.ones((3, 3), dtype=np.float64))
+# _ = conv2d(np.ones((3, 3), dtype=np.int64), np.ones((3, 3), dtype=np.uint8))
 
 @numba.njit(fastmath=True, cache=True)
 def run_mitosis_loop_numba(
@@ -173,25 +192,6 @@ def run_mitosis_loop_numba(
         num_empty = write_idx
         if num_empty == 0:
             break
-
-# Graphic
-render_arr = np.zeros((parameters['FIELD_HEIGHT'], parameters['FIELD_WIDTH'], 4), dtype=np.uint8) # BGRA
-render_arr[..., 3] = 255
-def render_field(surface, fields, filter=None):
-    O2_max = fields['O2'].max()
-    H_max = fields['H'].max()
-
-    if O2_max <= 0: O2_max = 1.0
-    if H_max <= 0: H_max = 1.0
-
-    O2_max = 155 / O2_max
-    H_max = 105 / H_max
-
-    np.multiply(fields['O2'], O2_max, out=render_arr[..., 0], casting='unsafe')
-    np.multiply(fields['H'], H_max, out=render_arr[..., 1], casting='unsafe')
-    np.multiply(fields['cells'], 80, out=render_arr[..., 2], casting='unsafe')
-
-    pygame.surfarray.blit_array(surface, render_arr.view(np.uint32).reshape(parameters['FIELD_SIZE']).T)
 
 # Logic
 
@@ -351,82 +351,3 @@ def make_step(fields, params=parameters):
         H_diffusion(fields)
         end_time = time.perf_counter_ns()
         return end_time - start_time
-
-
-
-
-pygame.init()
-scr = pygame.display.set_mode((parameters['FIELD_WIDTH']+100, parameters['FIELD_HEIGHT']+100))
-font = pygame.font.Font(None, 24)
-clock = pygame.time.Clock()
-
-field_pixels = pygame.Surface((parameters['FIELD_WIDTH'], parameters['FIELD_HEIGHT']))
-point_state = {'state': -1, 'O2': -1, 'H': -1, 'age': -1, 'G2': -1}
-step = 0
-max_step = int(parameters['MAX_TIME']/parameters['DT'])
-print(f"max_step = {max_step}")
-timer = 0.0
-
-fields['O2'] = 1e-13*np.random.random(parameters['FIELD_SIZE'])
-# fields['H'] = 1.5e-14*np.random.random(parameters['FIELD_SIZE'])
-# fields['cells'][:, :parameters['FIELD_WIDTH']//2] = 0 
-
-# fields['cells'][parameters['FIELD_HEIGHT']//8*6:parameters['FIELD_HEIGHT']//8*7, parameters['FIELD_WIDTH']//2:] = 2 
-# fields['cells'][parameters['FIELD_HEIGHT']//2:, parameters['FIELD_WIDTH']//4*3:] = 3
-
-
-scr.fill((25, 25, 25))
-render_field(field_pixels, fields)
-is_simulating = True
-
-running = True
-while running:
-    clock.tick()
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            j, i = pygame.mouse.get_pos()
-            i -= 50
-            j -= 50
-            if event.button == 1:
-                fields['O2'][i-5:i+5, j-5:j+5] += 1.0e-11
-            elif event.button == 3:
-                fields['H'][i-5:i+5, j-5:j+5] += 3.0e-12
-            render_field(field_pixels, fields)
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                is_simulating = not is_simulating
-            if event.key == pygame.K_i:
-                save_data('output_sameple.txt', fields)
-            # print(fields[0]['cells'])
-
-    ### Make_step
-    if is_simulating: 
-        timer += make_step(fields, parameters)
-        step += 1
-        
-        render_field(field_pixels, fields)
-        # is_simulating = False
-
-    scr.blit(field_pixels, (50, 50))
-    pygame.draw.rect(scr, col.BLACK, (0, 0, parameters['FIELD_WIDTH']+200, 40))
-    j, i = pygame.mouse.get_pos()
-    i -= 50
-    j -= 50
-    if (0 <= i <= parameters['FIELD_HEIGHT']-1) and (0 <= j <= parameters['FIELD_HEIGHT']-1):
-        point_state['state'] = fields['cells'][i, j]
-        point_state['O2'] = fields['O2'][i, j]
-        point_state['H'] = fields['H'][i, j]
-        point_state['age'] = fields['age'][i, j]
-        point_state['G2'] = fields['G2'][i, j]
-
-    scr.blit(font.render(f"t: {step*parameters['DT']:.2f}    av_stp_t: {(timer)/max(1, step)/10**(9-3):.3f}    O2: {fields['O2'].sum():.5e}    H: {fields['H'].sum():.3e}    FPS: {clock.get_fps():.1f}", True, (255, 255, 255)), (0, 0))
-    scr.blit(font.render(f"state: {point_state['state']}  O2: {point_state['O2']:.3e}  H: {point_state['H']:.3e} age: {point_state['age']:.2f} G2: {point_state['G2']:.2f}",  True, (255, 255, 255)), (0, 20))
-    pygame.display.flip()
-    if step >= max_step:
-        running = False
-
-print(f"t = {(timer)/max(1, step)/10**(9-3)} ms, shape = {fields['O2'].shape} steps = {step}")
-
-pygame.quit()
