@@ -28,19 +28,14 @@ class FFT_Diffusion:
         return sfft.irfft2(field_hat, s=field.shape, workers=-1, overwrite_x=True)
 
 ### Consts
-cell_cols = np.array([
-    0, #Empty_cell
-    col.col_to_num((240, 160, 117)), # Healthy_cell
-    col.col_to_num((242, 39, 39)), # Proliferating tumour cell
-    col.col_to_num((102, 17, 17)), # Quiscent tumour cell
-])
 
 parameters = {'FIELD_WIDTH': 1000, 'FIELD_HEIGHT': 750, 'FIELD_SIZE': (-1, -1),
               'MAX_TIME': -1.0, 'DT': 1.0, 'DT_S': 3600.0, 'DX': 3e-05,
               'O2_DIFFUSION_K': 2.41e-9, 'H_DIFFUSION_K': 1.1e-9, 
-              'O2_HEALTHY_LIVE_CONSUMPTION': -1.0, 'O2_HEALTHY_MITOSIS_CONSUMPTION': -1.0, 'O2_HEALTHY_HYPOXIA_LIMIT': -1.0, 'H_HEALTHY_NECR_COUNT': -1.0, 'H_HEALTHY_LIVE_CONSUMPTION': -1.0, 'H_HEALTHY_DEATH_LIMIT': -1.0, 'H_HEALTHY_APOPTOSIS_CONSUMPTION': -1.0, 'AGE_HEALTHY_ADULT': -1.0, 'AGE_HEALTHY_G2': -1.0,
-              'O2_PROLIF_TUMOUR_LIVE_CONSUMPTION': -1.0, 'O2_PROLIF_TUMOUR_MITOSIS_CONSUMPTION': -1.0, 'O2_PROLIF_TUMOUR_QUISC_LIMIT': -1.0, 'H_PROLIF_TUMOUR_RELEASE_COUNT': -1.0, 'AGE_PROLIF_TUMOUR_ADULT': -1.0, 'AGE_PROLIF_TUMOUR_G2': -1.0, 
-              'O2_QUISC_TUMOUR_LIVE_CONSUMPTION': -1.0, 'O2_QUISC_TO_PROLIF_LIMIT': -1.0, 'O2_QUISC_TUMOUR_NECR_LIMIT': -1.0, 'H_QUISC_TO_PROLIF_LIMIT': -1.0, 'H_QUISC_TUMOUR_RELEASE_COUNT': -1.0, 'H_QUISC_TUMOUR_NECR_COUNT': 6.5e-15}
+              'O2_HEALTHY_LIVE_CONSUMPTION': -1.0, 'O2_HEALTHY_HYPOXIA_LIMIT': -1.0, 'H_HEALTHY_NECR_COUNT': -1.0, 'H_HEALTHY_LIVE_CONSUMPTION': -1.0, 'H_HEALTHY_DEATH_LIMIT': -1.0, 'H_HEALTHY_APOPTOSIS_CONSUMPTION': -1.0, 'AGE_HEALTHY_ADULT': -1.0, 'AGE_HEALTHY_G2': -1.0,
+              'O2_PROLIF_TUMOUR_LIVE_CONSUMPTION': -1.0, 'O2_PROLIF_TUMOUR_QUISC_LIMIT': -1.0, 'H_PROLIF_TUMOUR_RELEASE_COUNT': -1.0, 'AGE_PROLIF_TUMOUR_ADULT': -1.0, 'AGE_PROLIF_TUMOUR_G2': -1.0, 
+              'O2_QUISC_TUMOUR_LIVE_CONSUMPTION': -1.0, 'O2_QUISC_TO_PROLIF_LIMIT': -1.0, 'O2_QUISC_TUMOUR_NECR_LIMIT': -1.0, 'H_QUISC_TO_PROLIF_LIMIT': -1.0, 'H_QUISC_TUMOUR_RELEASE_COUNT': -1.0, 'H_QUISC_TUMOUR_NECR_COUNT': 6.5e-15,
+              'O2_SPAWN': -1.0}
 parameters["FIELD_SIZE"] = (parameters['FIELD_HEIGHT'], parameters['FIELD_WIDTH'])
 parameters["DT_S"] = 3600 * parameters['DT']
 parameters["O2_LIVE_CONSUMPTION"] = parameters['DT'] * np.array([0.0, parameters['O2_HEALTHY_LIVE_CONSUMPTION'], parameters['O2_PROLIF_TUMOUR_LIVE_CONSUMPTION'], parameters['O2_QUISC_TUMOUR_LIVE_CONSUMPTION']])
@@ -48,12 +43,10 @@ parameters["H_NECR_COUNT"] = np.array([0.0, parameters['H_HEALTHY_NECR_COUNT'], 
 parameters["H_RELEASE_COUNT"] = parameters['DT'] * np.array([0.0, 0.0, parameters['H_PROLIF_TUMOUR_RELEASE_COUNT'], parameters['H_QUISC_TUMOUR_RELEASE_COUNT']])
 parameters["AGE_ADULT"] = np.array([0.0, parameters['AGE_HEALTHY_ADULT'], parameters['AGE_PROLIF_TUMOUR_ADULT'], 0.0])
 parameters["AGE_G2"] = np.array([0.0, parameters['AGE_HEALTHY_G2'], parameters['AGE_PROLIF_TUMOUR_G2'], 0.0])
+
 def import_parameters(file_name: str, params=parameters):
     dict = {}
     with open(file_name, 'r', encoding='utf-8') as f:
-        # for _ in range(2):
-        #     key, val = f.readline().split()
-        #     dict[key] = int(val)
         dict.update({key: float(val) if (('.' in val) or ('e' in val)) else int(val) for line in f for key, val in [line.split()]})
         params.update(dict)
         params['FIELD_SIZE'] = (params['FIELD_HEIGHT'], params['FIELD_WIDTH'])
@@ -63,15 +56,11 @@ def import_parameters(file_name: str, params=parameters):
         params["H_RELEASE_COUNT"] = parameters['DT'] * np.array([0.0, 0.0, params['H_PROLIF_TUMOUR_RELEASE_COUNT'], params['H_QUISC_TUMOUR_RELEASE_COUNT']])
         params["AGE_ADULT"] = np.array([0.0, params['AGE_HEALTHY_ADULT'], params['AGE_PROLIF_TUMOUR_ADULT'], 0.0])
         params["AGE_G2"] = np.array([0.0, params['AGE_HEALTHY_G2'], params['AGE_PROLIF_TUMOUR_G2'], 0.0])
-        
     return dict
 import_parameters("parameters.txt", parameters)
 
 def save_data(file_name, fields, format="%d", filter=None):
     np.savetxt(file_name, fields['cells'], fmt=format)
-# 1.35e-14 - H_HEAL_LIM
-# H_PROLIF_TUMOUR_RELEASE_COUNT 6.0e-15
-
 
 fields =  {"cells":  np.ones(parameters['FIELD_SIZE'], dtype=np.uint8),
            "O2":     np.zeros(parameters['FIELD_SIZE'], dtype=np.float64), 
@@ -84,7 +73,6 @@ fields =  {"cells":  np.ones(parameters['FIELD_SIZE'], dtype=np.uint8),
 
 
 ### Buffers
-
 buffer_mask = np.empty(parameters['FIELD_SIZE'], dtype=bool)
 buffer_mask2 = np.empty(parameters['FIELD_SIZE'], dtype=bool)
 buffer_mask3 = np.empty(parameters['FIELD_SIZE'], dtype=bool)
@@ -99,8 +87,6 @@ buffer_int16_2 = np.empty(parameters['FIELD_SIZE'], dtype=np.int16)
 buffer_int8 = np.empty(parameters['FIELD_SIZE'], dtype=np.int8)
 # buffer_shift_fields = np.empty()
 rand_generator = np.random.default_rng()
-
-
 
 ### Functions
 
@@ -191,13 +177,7 @@ def run_mitosis_loop_numba(
 # Graphic
 render_arr = np.zeros((parameters['FIELD_HEIGHT'], parameters['FIELD_WIDTH'], 4), dtype=np.uint8) # BGRA
 render_arr[..., 3] = 255
-def render_field(surface, fields, cols, filter=None):
-    # if filter == None:
-    #     render_arr[..., 0]
-    # if filter == 'cells':
-    #     pygame.surfarray.blit_array(surface, cols[fields[0]['cells']])
-    #     return True
-    
+def render_field(surface, fields, filter=None):
     O2_max = fields['O2'].max()
     H_max = fields['H'].max()
 
@@ -264,7 +244,6 @@ def H_cells_lim(fields, params=parameters):
 def healthy_mitosis(fields, params=parameters):
     global buffer_mask, buffer_mask2
     global buffer_int16_1, buffer_int16_2, buffer_int8
-    #, buffer_mask_4d, i_indices, j_indices
     np.equal(fields['cells'], 1, out=buffer_mask)
     np.greater_equal(fields['G2'], params['AGE_HEALTHY_G2'], out=buffer_mask2)
     np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask)
@@ -286,7 +265,6 @@ def healthy_mitosis(fields, params=parameters):
 def prolif_mitosis(fields, params=parameters):
     global buffer_mask, buffer_mask2
     global buffer_int16_1, buffer_int16_2, buffer_int8
-    #, buffer_mask_4d, i_indices, j_indices
     np.equal(fields['cells'], 2, out=buffer_mask)
     np.greater_equal(fields['G2'], parameters['AGE_PROLIF_TUMOUR_G2'], out=buffer_mask2)
     np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask)
@@ -315,11 +293,20 @@ def H_O2_quiscent_to_prolif(fields, params=parameters):
 
 def O2_G2_cells_consumption(fields, params=parameters):
     global buffer_mask, buffer_mask2, buffer_float, buffer_float2
+    # Enough O2
     params['O2_LIVE_CONSUMPTION'].take(fields['cells'], out=buffer_float)
     np.greater_equal(fields['O2'], buffer_float, out=buffer_mask)
+    # Enough old
     params['AGE_ADULT'].take(fields['cells'], out=buffer_float2)
     np.greater_equal(fields['age'], buffer_float2, out=buffer_mask2)
+
     np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask)
+    # Not enough G2
+    params['AGE_G2'].take(fields['cells'], out=buffer_float2)
+    np.less_equal(fields['G2'], buffer_float2, out=buffer_mask2)
+
+    np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask)
+
     fields['O2'][buffer_mask] -= buffer_float[buffer_mask]
     fields['G2'][buffer_mask] += params['DT']
 
@@ -327,8 +314,15 @@ def age_cells_inc(fields, params=parameters):
     fields['age'] += params['DT']
 
 def O2_production(fields, params=parameters):
-    fields['O2'][:, #params['FIELD_HEIGHT']//2-5:params['FIELD_HEIGHT']//2+5, 
-                 params['FIELD_WIDTH']//4-5:params['FIELD_WIDTH']//4+5] += 3.0e-14*parameters['DT']
+    global buffer_mask, buffer_mask2
+    # fields['O2'][:, #params['FIELD_HEIGHT']//2-5:params['FIELD_HEIGHT']//2+5, 
+    #              params['FIELD_WIDTH']//4-5:params['FIELD_WIDTH']//4+5] += 3.0e-14*parameters['DT']
+    buffer_mask[:] = False
+    buffer_mask[::4, ::4] = True
+    np.less(fields['cells'], 2, out=buffer_mask2)
+    np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask2)
+    val = params['DT']*params['O2_SPAWN']
+    fields['O2'][buffer_mask2] += val
 
 def H_production(fields, params=parameters):
     global buffer_float
@@ -340,8 +334,24 @@ def O2_diffusion(fields):
 
 def H_diffusion(fields):
     fields['H'] = fields['H_dif'].diffuse(fields['H'])
-    
-    
+
+def make_step(fields, params=parameters):
+        start_time = time.perf_counter_ns()
+        O2_live_consumption(fields, params)
+        H_healthy_consumption(fields, params)
+        H_cells_lim(fields, params)
+        healthy_mitosis(fields, params)
+        prolif_mitosis(fields, params)
+        H_O2_quiscent_to_prolif(fields, params)
+        O2_G2_cells_consumption(fields, params)
+        age_cells_inc(fields, params)
+        O2_production(fields, params)
+        H_production(fields, params)
+        O2_diffusion(fields)
+        H_diffusion(fields)
+        end_time = time.perf_counter_ns()
+        return end_time - start_time
+
 
 
 
@@ -359,20 +369,18 @@ timer = 0.0
 
 fields['O2'] = 1e-13*np.random.random(parameters['FIELD_SIZE'])
 # fields['H'] = 1.5e-14*np.random.random(parameters['FIELD_SIZE'])
-fields['cells'][:, :parameters['FIELD_WIDTH']//2] = 0 
+# fields['cells'][:, :parameters['FIELD_WIDTH']//2] = 0 
 
-fields['cells'][parameters['FIELD_HEIGHT']//8*6:parameters['FIELD_HEIGHT']//8*7, parameters['FIELD_WIDTH']//2:] = 2 
+# fields['cells'][parameters['FIELD_HEIGHT']//8*6:parameters['FIELD_HEIGHT']//8*7, parameters['FIELD_WIDTH']//2:] = 2 
 # fields['cells'][parameters['FIELD_HEIGHT']//2:, parameters['FIELD_WIDTH']//4*3:] = 3
 
 
-
 scr.fill((25, 25, 25))
-render_field(field_pixels, fields, cell_cols)
+render_field(field_pixels, fields)
 is_simulating = True
 
 running = True
 while running:
-    # step += 1
     clock.tick()
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -385,7 +393,7 @@ while running:
                 fields['O2'][i-5:i+5, j-5:j+5] += 1.0e-11
             elif event.button == 3:
                 fields['H'][i-5:i+5, j-5:j+5] += 3.0e-12
-            render_field(field_pixels, fields, cell_cols)
+            render_field(field_pixels, fields)
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
                 is_simulating = not is_simulating
@@ -395,32 +403,13 @@ while running:
 
     ### Make_step
     if is_simulating: 
-        start_time = time.perf_counter_ns()
-        
-        O2_live_consumption(fields, parameters)
-        H_healthy_consumption(fields, parameters)
-        H_cells_lim(fields, parameters)
-        healthy_mitosis(fields, parameters)
-        prolif_mitosis(fields, parameters)
-        H_O2_quiscent_to_prolif(fields, parameters)
-        O2_G2_cells_consumption(fields, parameters)
-        age_cells_inc(fields, parameters)
-        O2_production(fields, parameters)
-        H_production(fields, parameters)
-        O2_diffusion(fields)
-        H_diffusion(fields)
-
-        end_time = time.perf_counter_ns()
-
-        # start_time = time.perf_counter_ns()
-        timer += end_time - start_time
+        timer += make_step(fields, parameters)
         step += 1
         
-        render_field(field_pixels, fields, cell_cols)
+        render_field(field_pixels, fields)
         # is_simulating = False
 
-    # pygame.surfarray.blit_array(field_pixels, cell_cols[fields[0]['cells']])
-    scr.blit(field_pixels, (50, 50))    
+    scr.blit(field_pixels, (50, 50))
     pygame.draw.rect(scr, col.BLACK, (0, 0, parameters['FIELD_WIDTH']+200, 40))
     j, i = pygame.mouse.get_pos()
     i -= 50
@@ -431,8 +420,7 @@ while running:
         point_state['H'] = fields['H'][i, j]
         point_state['age'] = fields['age'][i, j]
         point_state['G2'] = fields['G2'][i, j]
-        # circ = g.Circle(scr, (j+50, i+50), 5, 0)
-        # circ.evaluate()
+
     scr.blit(font.render(f"t: {step*parameters['DT']:.2f}    av_stp_t: {(timer)/max(1, step)/10**(9-3):.3f}    O2: {fields['O2'].sum():.5e}    H: {fields['H'].sum():.3e}    FPS: {clock.get_fps():.1f}", True, (255, 255, 255)), (0, 0))
     scr.blit(font.render(f"state: {point_state['state']}  O2: {point_state['O2']:.3e}  H: {point_state['H']:.3e} age: {point_state['age']:.2f} G2: {point_state['G2']:.2f}",  True, (255, 255, 255)), (0, 20))
     pygame.display.flip()
