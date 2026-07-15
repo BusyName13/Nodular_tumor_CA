@@ -106,6 +106,7 @@ import_parameters("parameters.txt", parameters)
 
 def save_data(file_name, fields, format="%d", filter=None):
     np.savetxt(file_name, fields['cells'], fmt=format)
+    return fields['cells']
 ### Functions
 
 # Math

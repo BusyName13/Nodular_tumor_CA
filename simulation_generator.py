@@ -1,4 +1,7 @@
 import numpy as np
+import Nodular_tumour_2 as sim
+import os
+import time
 
 def parameters_generator(initial_params: list, file_name="parameters.txt"):
     parameters = {
@@ -18,7 +21,7 @@ def parameters_generator(initial_params: list, file_name="parameters.txt"):
         "O2_QUISC_TUMOUR_PROLIF_LIMIT": -1.0,
         "H_QUISC_TO_PROLIF_LIMIT": -1.0,
         "H_QUISC_TUMOUR_RELEASE_COUNT": -1.0,
-        "H_TUMOUR_DEATH_LIMIT": -1.0,
+        "H_QUISC_TUMOUR_DEATH_LIMIT": -1.0,
         "H_QUISC_TUMOUR_NECR_COUNT": -1.0,
         "O2_SPAWN": -1.0,
         "O2_P_HEALTHY_mm_Hg": 65,
@@ -26,7 +29,7 @@ def parameters_generator(initial_params: list, file_name="parameters.txt"):
         "O2_RHO_HEALTHY": -1.0,
         "O2_RHO_TUMOUR": -1.0,
         "O2_HEALTHY_LIVE_CONSUPTION_NOT_HOUR": 1.57E-04,
-        "O2_HEALTHY_LIVE_CONSUPTION_NOT_HOUR": 1.57E-04,
+        "O2_TUMOUR_LIVE_CONSUPTION_NOT_HOUR": 1.57E-04,
         "CELL_VOLUME": -1.0,
         "CELL_HYPOXIA": 1.25E-05,
         "O2_M": 32,
@@ -41,20 +44,34 @@ def parameters_generator(initial_params: list, file_name="parameters.txt"):
         "VOLUME_MCF7": -1.0,
         "R_HEALTHY": -1.0,
         "R_TUMOUR": -1.0
-        
     }
+
     parameters['VOLUME_MCF10A'] = parameters['VOLUME_MCF10A_ml']/1.0e+6
     parameters['VOLUME_MCF7'] = parameters['VOLUME_MCF7_ml']/1.0e+6
     parameters['R_HEALTHY'] = (parameters['VOLUME_MCF10A']*3/(4*np.pi))**(1/3)
     parameters['R_TUMOUR'] = (parameters['VOLUME_MCF7']*3/(4*np.pi))**(1/3)
     parameters['DX'] = parameters['R_TUMOUR']*2
 
-    parameters['O2_RHO_HEALTHY'] = parameters['O2_P_HEALTHY_mm_Hg'] * 0.0000000429
-    parameters['O2_RHO_TUMOUR'] = parameters['O2_P_TUMOUR_mm_Hg'] * 0.0000000429
+    parameters['O2_RHO_HEALTHY'] = parameters['O2_P_HEALTHY_mm_Hg'] * 4.29e-08
+    parameters['O2_RHO_TUMOUR'] = parameters['O2_P_TUMOUR_mm_Hg'] * 4.29e-08
 
     parameters['CELL_VOLUME'] = parameters['DX'] * parameters['DX'] * parameters['DX']
     parameters['CELL_SPHERE_VOLUME'] = (4*np.pi)/(3*8) * parameters['CELL_VOLUME']
-    
+
+    parameters['O2_HEALTHY_LIVE_CONSUMPTION'] = parameters['O2_HEALTHY_LIVE_CONSUPTION_NOT_HOUR']*parameters['VOLUME_MCF10A_ml']*3600*parameters['O2_RHO_HEALTHY']/parameters['O2_M']
+    parameters['H_HEALTHY_NECR_COUNT'] = parameters['VOLUME_MCF10A_ml']*parameters['H_INCELL_N']
+    parameters['H_HEALTHY_LIVE_CONSUMPTION'] = parameters['CELL_VOLUME']*parameters['H_REABSORTION_SPEED']*parameters['H_CELL_NORMAL_N']
+    parameters['H_HEALTHY_DEATH_LIMIT'] = 5.0118e-05 * parameters['CELL_VOLUME']
+    parameters['O2_PROLIF_TUMOUR_LIVE_CONSUMPTION'] = parameters['O2_TUMOUR_LIVE_CONSUPTION_NOT_HOUR']*parameters['VOLUME_MCF7_ml']*3600*parameters['O2_RHO_TUMOUR']/parameters['O2_M']
+    parameters['H_PROLIF_TUMOUR_RELEASE_COUNT'] = parameters['H_PROLIF_TUMOUR_GENERATION_SPEED'] * 1e-9 * 60 * parameters['MFC_7_AVE_N']
+    parameters['H_PROLIF_TO_QUISC_LIMIT'] = 0.000398107 * parameters['CELL_VOLUME']
+    parameters['O2_QUISC_TUMOUR_LIVE_CONSUMPTION'] = parameters['O2_PROLIF_TUMOUR_LIVE_CONSUMPTION'] / 2
+    parameters['O2_QUISC_TUMOUR_PROLIF_LIMIT'] = parameters['CELL_VOLUME'] * parameters['CELL_HYPOXIA'] * 1e+3
+    parameters['H_QUISC_TO_PROLIF_LIMIT'] = 0.000398107 * parameters['CELL_VOLUME']
+    parameters['H_QUISC_TUMOUR_RELEASE_COUNT'] = parameters['H_QUISC_TUMOUR_GENERATION_SPEED'] * 1e-9 * 60 * parameters['MFC_7_AVE_N']
+    parameters['H_QUISC_TUMOUR_DEATH_LIMIT'] = 0.000630957 * parameters['CELL_VOLUME']
+    parameters['H_QUISC_TUMOUR_NECR_COUNT'] = parameters['VOLUME_MCF7_ml'] * parameters['H_INCELL_N']
+    parameters['O2_SPAWN'] = parameters['CELL_VOLUME'] * 1e+6 * 18 * 8.04e-9
 
     result = {
         "FIELD_WIDTH": parameters['FIELD_WIDTH'],
@@ -80,6 +97,64 @@ def parameters_generator(initial_params: list, file_name="parameters.txt"):
         "O2_QUISC_TO_PROLIF_LIMIT": parameters['O2_QUISC_TUMOUR_PROLIF_LIMIT'],
         "H_QUISC_TO_PROLIF_LIMIT": parameters['H_QUISC_TO_PROLIF_LIMIT'],
         "H_QUISC_TUMOUR_RELEASE_COUNT": parameters['H_QUISC_TUMOUR_RELEASE_COUNT'],
+        "H_QUISC_TUMOUR_DEATH_LIMIT": parameters['H_QUISC_TUMOUR_DEATH_LIMIT'],
         "H_QUISC_TUMOUR_NECR_COUNT": parameters['H_QUISC_TUMOUR_NECR_COUNT'],
         "O2_SPAWN": parameters['O2_SPAWN'],
     }
+    with open(file_name, 'w', encoding='utf-8') as file:
+        for name in result:
+            print(name, result[name], file=file)
+    return result
+
+def make_parameters_files(list_parameters, folder, fname_prefix):
+    result = []
+    for i in range(len(list_parameters)):
+        result.append(parameters_generator(list_parameters[i], folder+'/'+fname_prefix+'_'+str(i)+'.txt'))
+    return result
+
+def make_sim(parameters_fname, result_fname):
+    sim.import_parameters(parameters_fname)
+    sim.fields['O2'][:] = 6 * sim.parameters['O2_HEALTHY_LIVE_CONSUMPTION'] * sim.parameters['DT']
+    d = 5
+    sim.fields['cells'][sim.parameters['FIELD_HEIGHT']//2-d:sim.parameters['FIELD_HEIGHT']//2+d, 
+                    sim.parameters['FIELD_WIDTH']//2-d:sim.parameters['FIELD_WIDTH']//2+d] = 2 
+
+    max_step = int(sim.parameters['MAX_TIME']/sim.parameters['DT'])
+    for _ in range(max_step):
+        sim.make_step(fields=sim.fields, params=sim.parameters)
+    return sim.save_data(result_fname, sim.fields)
+
+def make_sims(params_folder, result_folder, is_need_text_output=True):
+    file_names = [f for f in os.listdir(params_folder) if os.path.isfile(os.path.join(params_folder, f)) and f.endswith('.txt')]
+    results = []
+    # errors = []
+    timer = 0
+    for i in range(len(file_names)):
+        if is_need_text_output:
+            print(f"simulation({file_names[i]}): ", end='')
+
+        start_time = time.perf_counter()
+        try:
+            results.append(make_sim(params_folder+'/'+file_names[i], result_folder+'/result_'+file_names[i]))
+            if is_need_text_output:
+                print('ready', end='')
+
+        except Exception as e:
+            # errors.append(e)
+            results.append(e)
+            if is_need_text_output:
+                print('error', end='')
+
+        end_time = time.perf_counter()
+        timer += end_time - start_time
+
+        if is_need_text_output:
+            print(f", {end_time - start_time:.2f} s")
+
+    if is_need_text_output:
+        print(f"time: {timer:.2f} s")
+    return results#, errors
+
+            
+if __name__ == '__main__':
+    print(make_sims('parameters', 'simulation_results'))

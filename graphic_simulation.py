@@ -4,7 +4,6 @@ import pygame
 import graphic as g
 import colors as col
 
-sim.import_parameters("parameters.txt", sim.parameters)
 print((sim.parameters['FIELD_HEIGHT'], sim.parameters['FIELD_WIDTH'], 4))
 # Graphic
 render_arr = np.zeros((sim.parameters['FIELD_HEIGHT'], sim.parameters['FIELD_WIDTH'], 4), dtype=np.uint8) # BGRA
@@ -26,6 +25,8 @@ def render_field(surface, fields, filter=None):
     pygame.surfarray.blit_array(surface, render_arr.view(np.uint32).reshape(sim.parameters['FIELD_SIZE']).T)
 
 
+sim.import_parameters("parameters/parameters.txt")
+
 pygame.init()
 scr = pygame.display.set_mode((sim.parameters['FIELD_WIDTH']+100, sim.parameters['FIELD_HEIGHT']+100))
 font = pygame.font.Font(None, 24)
@@ -38,12 +39,10 @@ max_step = int(sim.parameters['MAX_TIME']/sim.parameters['DT'])
 print(f"max_step = {max_step}")
 timer = 0.0
 
-sim.fields['O2'] = 1e-13*np.random.random(sim.parameters['FIELD_SIZE'])
-# sim.fields['H'] = 1.5e-14*np.random.random(sim.parameters['FIELD_SIZE'])
-# sim.fields['cells'][:, :sim.parameters['FIELD_WIDTH']//2] = 0 
-
-# sim.fields['cells'][sim.parameters['FIELD_HEIGHT']//8*6:sim.parameters['FIELD_HEIGHT']//8*7, sim.parameters['FIELD_WIDTH']//2:] = 2 
-# sim.fields['cells'][sim.parameters['FIELD_HEIGHT']//2:, sim.parameters['FIELD_WIDTH']//4*3:] = 3
+sim.fields['O2'][:] = 6 * sim.parameters['O2_HEALTHY_LIVE_CONSUMPTION'] * sim.parameters['DT']
+d = 5
+sim.fields['cells'][sim.parameters['FIELD_HEIGHT']//2-d:sim.parameters['FIELD_HEIGHT']//2+d, 
+                sim.parameters['FIELD_WIDTH']//2-d:sim.parameters['FIELD_WIDTH']//2+d] = 2 
 
 
 scr.fill((25, 25, 25))
@@ -61,9 +60,9 @@ while running:
             i -= 50
             j -= 50
             if event.button == 1:
-                sim.fields['O2'][i-5:i+5, j-5:j+5] += 1.0e-11
+                sim.fields['O2'][i-5:i+5, j-5:j+5] += sim.parameters['O2_HEALTHY_LIVE_CONSUMPTION'] * 10
             elif event.button == 3:
-                sim.fields['H'][i-5:i+5, j-5:j+5] += 3.0e-12
+                sim.fields['H'][i-5:i+5, j-5:j+5] += sim.parameters['H_HEALTHY_DEATH_LIMIT'] * 3
             render_field(field_pixels, sim.fields)
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
@@ -96,7 +95,8 @@ while running:
     scr.blit(font.render(f"state: {point_state['state']}  O2: {point_state['O2']:.3e}  H: {point_state['H']:.3e} age: {point_state['age']:.2f} G2: {point_state['G2']:.2f}",  True, (255, 255, 255)), (0, 20))
     pygame.display.flip()
     if step >= max_step:
-        running = False
+        # running = False
+        is_simulating = False
 
 print(f"t = {(timer)/max(1, step)/10**(9-3)} ms, shape = {sim.fields['O2'].shape} steps = {step}")
 
