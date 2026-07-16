@@ -4,6 +4,7 @@ import pygame
 import graphic as g
 import colors as col
 
+sim.import_parameters("parameters/parameters_1.txt")
 print((sim.parameters['FIELD_HEIGHT'], sim.parameters['FIELD_WIDTH'], 4))
 # Graphic
 render_arr = np.zeros((sim.parameters['FIELD_HEIGHT'], sim.parameters['FIELD_WIDTH'], 4), dtype=np.uint8) # BGRA
@@ -12,7 +13,7 @@ def render_field(surface, fields, filter=None):
     O2_max = fields['O2'].max()
     H_max = fields['H'].max()
 
-    if O2_max <= 0: O2_max = 1.0
+    if O2_max <= 0: O2_max = 1.0 
     if H_max <= 0: H_max = 1.0
 
     O2_max = 155 / O2_max
@@ -25,7 +26,6 @@ def render_field(surface, fields, filter=None):
     pygame.surfarray.blit_array(surface, render_arr.view(np.uint32).reshape(sim.parameters['FIELD_SIZE']).T)
 
 
-sim.import_parameters("parameters/parameters.txt")
 
 pygame.init()
 scr = pygame.display.set_mode((sim.parameters['FIELD_WIDTH']+100, sim.parameters['FIELD_HEIGHT']+100))

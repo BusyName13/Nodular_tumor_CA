@@ -20,9 +20,9 @@ class FFT_Diffusion:
         self.kernel = np.exp(-D_K * k2 * dt)
 
     def diffuse(self, field: np.ndarray) -> np.ndarray:
-        field_hat = sfft.rfft2(field, workers=-1, overwrite_x=True)
+        field_hat = sfft.rfft2(field, workers=1, overwrite_x=True)
         field_hat *= self.kernel
-        return sfft.irfft2(field_hat, s=field.shape, workers=-1, overwrite_x=True)
+        return sfft.irfft2(field_hat, s=field.shape, workers=1, overwrite_x=True)
 
 ### Consts
 
@@ -31,7 +31,7 @@ parameters = {'FIELD_WIDTH': 1000, 'FIELD_HEIGHT': 750, 'FIELD_SIZE': (-1, -1),
               'O2_DIFFUSION_K': 2.41e-9, 'H_DIFFUSION_K': 1.1e-9, 
               'O2_HEALTHY_LIVE_CONSUMPTION': -1.0, 'O2_HEALTHY_HYPOXIA_LIMIT': -1.0, 'H_HEALTHY_NECR_COUNT': -1.0, 'H_HEALTHY_LIVE_CONSUMPTION': -1.0, 'H_HEALTHY_DEATH_LIMIT': -1.0, 'H_HEALTHY_APOPTOSIS_CONSUMPTION': -1.0, 'AGE_HEALTHY_ADULT': -1.0, 'AGE_HEALTHY_G2': -1.0,
               'O2_PROLIF_TUMOUR_LIVE_CONSUMPTION': -1.0, 'O2_PROLIF_TUMOUR_QUISC_LIMIT': -1.0, 'H_PROLIF_TUMOUR_RELEASE_COUNT': -1.0, 'AGE_PROLIF_TUMOUR_ADULT': -1.0, 'AGE_PROLIF_TUMOUR_G2': -1.0, 
-              'O2_QUISC_TUMOUR_LIVE_CONSUMPTION': -1.0, 'O2_QUISC_TO_PROLIF_LIMIT': -1.0, 'O2_QUISC_TUMOUR_NECR_LIMIT': -1.0, 'H_QUISC_TO_PROLIF_LIMIT': -1.0, 'H_QUISC_TUMOUR_RELEASE_COUNT': -1.0, 'H_QUISC_TUMOUR_NECR_COUNT': 6.5e-15,
+              'O2_QUISC_TUMOUR_LIVE_CONSUMPTION': -1.0, 'O2_QUISC_TO_PROLIF_LIMIT': -1.0, 'O2_QUISC_TUMOUR_NECR_LIMIT': -1.0, 'H_QUISC_TO_PROLIF_LIMIT': -1.0, 'H_QUISC_TUMOUR_RELEASE_COUNT': -1.0, 'H_QUISC_TUMOUR_NECR_COUNT': 6.5e-15, 'H_QUISC_TUMOUR_DEATH_LIMIT': -1.0,
               'O2_SPAWN': -1.0}
 parameters["FIELD_SIZE"] = (parameters['FIELD_HEIGHT'], parameters['FIELD_WIDTH'])
 parameters["DT_S"] = 3600 * parameters['DT']
@@ -107,6 +107,9 @@ import_parameters("parameters.txt", parameters)
 def save_data(file_name, fields, format="%d", filter=None):
     np.savetxt(file_name, fields['cells'], fmt=format)
     return fields['cells']
+
+def load_cells(file_name):
+    return np.loadtxt(file_name, dtype=int)
 ### Functions
 
 # Math
@@ -235,7 +238,15 @@ def H_cells_lim(fields, params=parameters):
     np.equal(fields['cells'], 1, out=buffer_mask2)
     np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask2)
     fields['cells'][buffer_mask2] = 0
-    fields['H'][buffer_mask2] -= params['H_HEALTHY_APOPTOSIS_CONSUMPTION']
+    if params['H_HEALTHY_APOPTOSIS_CONSUMPTION'] != 0:
+        fields['H'][buffer_mask2] -= params['H_HEALTHY_APOPTOSIS_CONSUMPTION']
+    
+    np.greater(fields['H'], params['H_HEALTHY_DEATH_LIMIT'], out=buffer_mask)
+    np.equal(fields['cells'], 3, out=buffer_mask2)
+    np.logical_and(buffer_mask, buffer_mask2, out=buffer_mask2)
+    fields['cells'][buffer_mask2] = 0
+    
+
 
     np.greater(fields['H'], params['H_PROLIF_TO_QUISC_LIMIT'], out=buffer_mask)
     np.equal(fields['cells'], 2, out=buffer_mask2)
