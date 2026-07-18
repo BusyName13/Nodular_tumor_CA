@@ -24,7 +24,7 @@ def calculate_lacunarity(matrix, box_size=20):
     M2 = np.mean(masses**2)
 
     if M1 == 0:
-        return np.inf  # Handle division by zero for p=0 case
+        return 0 # Handle division by zero for p=0 case
 
     return M2 / (M1**2)
 

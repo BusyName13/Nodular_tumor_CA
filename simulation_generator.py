@@ -108,14 +108,15 @@ def parameters_generator(initial_params: list, file_name="parameters.txt"):
             print(name, result[name], file=file)
     return result
 
-def make_parameters_files(list_parameters, folder, fname_prefix):
+def make_parameters_files(list_parameters, folder, fname_prefix="parameters_"):
     result = []
     for i in range(len(list_parameters)):
         result.append(parameters_generator(list_parameters[i], folder+'/'+fname_prefix+str(i)+'.txt'))
     return result
 
-def make_sim(parameters_fname, result_fname, seed=42):
-    np.random.seed(seed)
+def make_sim(parameters_fname, result_fname, seed=None):
+    if seed != None:
+        np.random.seed(seed)
     sim.import_parameters(parameters_fname)
     sim.fields['O2'][:] = 6 * sim.parameters['O2_HEALTHY_LIVE_CONSUMPTION'] * sim.parameters['DT']
     d = 5
@@ -127,22 +128,36 @@ def make_sim(parameters_fname, result_fname, seed=42):
         sim.make_step(fields=sim.fields, params=sim.parameters)
     return sim.save_data(result_fname, sim.fields)
 
-def run_single_sim(file_name, params_folder, result_folder):
+def run_single_sim(file_name, params_folder="", result_folder="", seed=None, is_need_return=False):
     start_time = time.perf_counter()
     try:
-        result = make_sim(params_folder+'/'+file_name, result_folder+'/result_'+file_name, seed=42)
+        result = make_sim(params_folder+'/'*(params_folder != "")+file_name, result_folder+'/'*(result_folder != "")+'result_'+file_name, seed)
         status = "ready"
     except Exception as e:
         result = e
         status = 'error'
     timer = time.perf_counter() - start_time
+    if not is_need_return:
+        result = None
     return file_name, status, result, timer
 
-def make_sims(params_folder, result_folder, max_workers=None):
-    file_names = [f for f in os.listdir(params_folder) if os.path.isfile(os.path.join(params_folder, f)) and f.endswith('.txt')]
-    nums_of_sim = len(file_names)
+def make_sims(params_folder, result_folder, params_prefix = None, seed=None, nums_of_sim = None, max_workers=None, is_need_return=False):
+    if nums_of_sim == None:
+        nums_of_sim = len(os.listdir(params_folder))
+
+    if params_prefix == None:
+        file_names = [f for f in os.listdir(params_folder) if os.path.isfile(os.path.join(params_folder, f)) and f.endswith('.txt')]
+    else:
+        file_names = [f'{params_prefix}{i}.txt' for i in range(nums_of_sim) if os.path.isfile(f'{params_folder}/{params_prefix}{i}.txt')]
+        if len(file_names) != nums_of_sim:
+            print(f"Warning! num_os_sim = {nums_of_sim}, but found {len(file_names)} params files")
+            nums_of_sim = len(file_names)
+
+    # print(file_names)
+
     file_to_idx = {name: idx for idx, name in enumerate(file_names)}
-    results = [None] * nums_of_sim
+    if is_need_return:
+        results = [None] * nums_of_sim
     status_count = [0, 0]
     total_timer = -time.perf_counter()
     print(f"Generating {nums_of_sim} simulations.")
@@ -150,18 +165,27 @@ def make_sims(params_folder, result_folder, max_workers=None):
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         
         futures = {
-            executor.submit(run_single_sim, fname, params_folder, result_folder): fname  for fname in file_names
+            executor.submit(run_single_sim, fname, params_folder, result_folder, seed, is_need_return): fname  for fname in file_names
         }
         for future in tqdm(as_completed(futures), total=len(futures), desc="Симуляции"):
             fname, status, res, timer = future.result()
             status_count[status=='ready'] += 1
             idx = file_to_idx[fname]
-            results[idx] = res
+            if is_need_return:
+                results[idx] = res
 
     total_timer += time.perf_counter()
     print(f"Total parallel time: {total_timer:.2f} s: successufly: {status_count[1]}, errors: {status_count[0]}")
-    return results
+    if is_need_return:
+        return results
+    return None
 
+def generate_params_and_make_sims(list_params, params_folder, result_folder, files_prefix="parameters_", seed=None, max_workers=None):
+    make_parameters_files(list_params, params_folder, files_prefix)
+    return make_sims(params_folder, result_folder, files_prefix, seed, len(list_params), max_workers)
+
+def load_data(file_name):
+    return sim.load_cells(file_name)
             
 if __name__ == '__main__':
-    print(make_sims('parameters', 'simulation_results'))
+    print(make_sims('parameters', 'simulation_results', "parameters_", nums_of_sim=20, is_need_return=True))
